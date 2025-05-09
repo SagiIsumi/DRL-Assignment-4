@@ -48,7 +48,8 @@ class Agent(object):
         self.action_space = gym.spaces.Box(-1.0, 1.0, (21,), np.float64)
         self.model=PPO_Agent()
         output_index = 1
-        self.model.load_state_dict(torch.load(f'./checkpoint/PPO_v{output_index}.pth'))
+        self.model.load_state_dict(torch.load(f'./checkpoint/PPO_v{output_index}.pth', map_location=torch.device('cpu')))
+
 
     def act(self, observation):
         mean = np.mean(observation, axis=0)
