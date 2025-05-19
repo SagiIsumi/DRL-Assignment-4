@@ -78,6 +78,8 @@ def parse_args():
         help="the maximum norm for the gradient clipping")
     parser.add_argument("--target-kl", type=float, default=None,
         help="the target KL divergence threshold")
+    parser.add_argument("--from-pretrained", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="if toggled, the model will be loaded from a pretrained model")
     args = parser.parse_args()
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
@@ -89,7 +91,7 @@ args=parse_args()
 # env wrapper
 def make_env(gym_id, seed, idx, capture_video, run_name):
     def thunk():
-        env = make_dmc_env(gym_id,seed , flatten=True, use_pixels=False)
+        env = make_dmc_env(gym_id, seed , flatten=True, use_pixels=False)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         if capture_video:
             if idx == 0:
@@ -227,7 +229,7 @@ class PPO_agent(ppo_buffer):
                 self.rewards[step] = torch.tensor(reward).to(device).view(-1)
                 self.next_obs, self.next_done = torch.tensor(next_obs,dtype=torch.float32).to(device), torch.tensor(done).to(device)
                 if "episode" in info.keys():
-                    print(f"global_step={self.global_step}, episodic_return={info['episode']['r'].mean()}")
+                    # print(f"global_step={self.global_step}, episodic_return={info['episode']['r'].mean()}")
                     writer.add_scalar("charts/episodic_return", info["episode"]["r"].mean(), self.global_step)
                     writer.add_scalar("charts/episodic_length", info["episode"]["l"].mean(), self.global_step)
                     break
@@ -263,6 +265,7 @@ class PPO_agent(ppo_buffer):
                     if args.norm_adv:
                         mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
                     # Policy loss
+                    # print(f"ratio:{ratio}, b_advantages[mb_inds]:{b_advantages[mb_inds]}")
                     pg_loss1 = -mb_advantages * ratio
                     pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
                     pg_loss = torch.max(pg_loss1, pg_loss2).mean()
@@ -301,7 +304,7 @@ class PPO_agent(ppo_buffer):
             
 
 if __name__=="__main__":
-    output_index = 2
+    output_index = 1
     print(args)
     run_name=f"{args.gym_id}_{args.exp_name}_{args.seed}_{int(time.time())}"
     # whether build wandb 
@@ -339,5 +342,78 @@ if __name__=="__main__":
     print('envs.single_action_space.shape',envs.single_action_space.shape)
 
     agent=PPO_agent(envs,device,lr=args.learning_rate,writer=writer)
+    if args.from_pretrained:
+        agent.model.load_state_dict(torch.load(f'./checkpoint/PPO_v4.pth', map_location=device))
     agent.train()
     torch.save(agent.model.state_dict(), f'./checkpoint/PPO_v{output_index}.pth')
+    
+    
+    
+    """
+    output=1
+    python -m train --gym-id humanoid-walk \
+                    --total-timesteps 150000000 \
+                    --learning-rate 1e-4 \
+                    --num-envs 4 \
+                    --num-minibatches 64 \
+                    --num-steps 4096 \
+                    --update-epochs 6 \
+                    --max-grad-norm 0.5 \
+                    --clip-coef 0.15 \
+                    --vf-coef 0.2 \
+                    --ent-coef 0.0003 \
+                    --gamma 0.99 \
+                    --gae-lambda 0.95 \
+                    --capture-video False \
+                    --from-pretrained False \
+                         
+    output=2
+    python -m train --gym-id humanoid-walk \
+                    --total-timesteps 150000000 \
+                    --learning-rate 1.5e-4 \
+                    --num-envs 4 \
+                    --num-minibatches 64 \
+                    --num-steps 4096 \
+                    --update-epochs 4 \
+                    --max-grad-norm 0.5 \
+                    --clip-coef 0.2 \
+                    --vf-coef 0.22 \
+                    --ent-coef 0.0003 \
+                    --gamma 0.99 \
+                    --gae-lambda 0.95 \
+                    --capture-video False \
+                    --from-pretrained False \
+                        
+    output=4
+python -m train --gym-id humanoid-walk \
+                    --total-timesteps 150000000 \
+                    --learning-rate 8e-5 \
+                    --num-envs 4 \
+                    --num-minibatches 64 \
+                    --num-steps 4096 \
+                    --update-epochs 10 \
+                    --max-grad-norm 0.5 \
+                    --clip-coef 0.2 \
+                    --vf-coef 0.2 \
+                    --ent-coef 0.0003 \
+                    --gamma 0.99 \
+                    --gae-lambda 0.95 \
+                    --capture-video False \
+    output=5
+    python -m train --gym-id humanoid-walk \
+                    --total-timesteps 150000000 \
+                    --learning-rate 1.5e-4 \
+                    --num-envs 4 \
+                    --num-minibatches 32 \
+                    --num-steps 2048 \
+                    --update-epochs 4 \
+                    --max-grad-norm 0.5 \
+                    --clip-coef 0.2 \
+                    --vf-coef 0.22 \
+                    --ent-coef 0.0003 \
+                    --gamma 0.99 \
+                    --gae-lambda 0.95 \
+                    --capture-video False \
+                    --from-pretrained False \
+    
+    """

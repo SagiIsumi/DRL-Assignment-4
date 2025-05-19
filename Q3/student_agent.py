@@ -33,7 +33,7 @@ class PPO_Agent(nn.Module):
         return self.critic(x)
 
     def get_action_and_value(self, x, action=None):
-        action_mean = self.actor_mean(x)
+        action_mean = self.actor_mean(x).unsqueeze(0)
         action_logstd = self.actor_logstd
         action_std = torch.exp(action_logstd)
         probs = Normal(action_mean, action_std)
@@ -47,17 +47,42 @@ class Agent(object):
     def __init__(self):
         self.action_space = gym.spaces.Box(-1.0, 1.0, (21,), np.float64)
         self.model=PPO_Agent()
-        output_index = 1
+        output_index = 5
         self.model.load_state_dict(torch.load(f'./checkpoint/PPO_v{output_index}.pth', map_location=torch.device('cpu')))
-
+        self.mean = np.zeros((67,), dtype=np.float64)
+        self.var = np.ones((67,), dtype=np.float64)
+        self.count = 1e-4
 
     def act(self, observation):
-        mean = np.mean(observation, axis=0)
-        std = np.std(observation, axis=0)
-        observation = (observation - mean) / std
+        observation = np.array(observation, dtype=np.float64)
+        observation = np.expand_dims(observation, axis=0)
+        batch_mean = np.mean(observation, axis=0)
+        batch_var = np.var(observation, axis=0)
+        batch_count = observation.shape[0]
+        self.mean, self.var, self.count = update_mean_var_count_from_moments(
+            self.mean, self.var, self.count, batch_mean, batch_var, batch_count
+        )
+        observation = np.float32((observation - self.mean) / np.sqrt(self.var + 1e-8))
         observation = np.clip(observation, -10.0, 10.0)
         torch_observation = torch.from_numpy(observation).float()
         action,_,_,_=self.model.get_action_and_value(torch_observation)
         action = action.detach().numpy()
         action=np.clip(action, -1.0, 1.0).squeeze(0)
         return action
+    
+
+def update_mean_var_count_from_moments(
+    mean, var, count, batch_mean, batch_var, batch_count
+):
+    """Updates the mean, var and count using the previous mean, var, count and batch values."""
+    delta = batch_mean - mean
+    tot_count = count + batch_count
+
+    new_mean = mean + delta * batch_count / tot_count
+    m_a = var * count
+    m_b = batch_var * batch_count
+    M2 = m_a + m_b + np.square(delta) * count * batch_count / tot_count
+    new_var = M2 / tot_count
+    new_count = tot_count
+
+    return new_mean, new_var, new_count
