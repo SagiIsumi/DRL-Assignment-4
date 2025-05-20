@@ -304,7 +304,7 @@ class PPO_agent(ppo_buffer):
             
 
 if __name__=="__main__":
-    output_index = 1
+    output_index = 7
     print(args)
     run_name=f"{args.gym_id}_{args.exp_name}_{args.seed}_{int(time.time())}"
     # whether build wandb 

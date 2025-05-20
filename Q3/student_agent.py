@@ -47,7 +47,7 @@ class Agent(object):
     def __init__(self):
         self.action_space = gym.spaces.Box(-1.0, 1.0, (21,), np.float64)
         self.model=PPO_Agent()
-        output_index = 5
+        output_index = 1
         self.model.load_state_dict(torch.load(f'./checkpoint/PPO_v{output_index}.pth', map_location=torch.device('cpu')))
         self.mean = np.zeros((67,), dtype=np.float64)
         self.var = np.ones((67,), dtype=np.float64)
